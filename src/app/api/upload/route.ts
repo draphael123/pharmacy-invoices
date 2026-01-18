@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { getOrCreatePharmacy, createInvoice, createLineItems, createUploadHistory, detectAnomalies } from '@/lib/db';
 
 interface ColumnMapping {
-  date: string;
+  date?: string;  // Now optional
   productName: string;
   productCode?: string;
   quantity?: string;
@@ -39,6 +39,23 @@ function parseDate(value: string): Date | null {
   return null;
 }
 
+// Try to extract a date from the filename
+function extractDateFromFilename(filename: string): Date | null {
+  // Pattern: 2025-11-16 or 2025_11_16
+  const isoMatch = filename.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+  }
+  
+  // Pattern: 11-16-2025 or 11_16_2025
+  const usMatch = filename.match(/(\d{2})[-_](\d{2})[-_](\d{4})/);
+  if (usMatch) {
+    return new Date(parseInt(usMatch[3]), parseInt(usMatch[1]) - 1, parseInt(usMatch[2]));
+  }
+  
+  return null;
+}
+
 function parseNumber(value: string | number): number {
   if (typeof value === 'number') return value;
   if (!value) return 0;
@@ -47,11 +64,91 @@ function parseNumber(value: string | number): number {
   return isNaN(num) ? 0 : num;
 }
 
+// Check if headers look like actual column headers (not a title row)
+function looksLikeHeaders(headers: string[]): boolean {
+  const validHeaders = headers.filter(h => h && h.trim() !== '' && !h.startsWith('__EMPTY'));
+  if (validHeaders.length < 3) return false;
+  
+  const normalizedHeaders = validHeaders.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const commonPatterns = ['id', 'name', 'date', 'quantity', 'qty', 'price', 'total', 'product', 'item', 'order', 'medication', 'location', 'patient'];
+  const matchCount = normalizedHeaders.filter(h => commonPatterns.some(p => h.includes(p))).length;
+  
+  return matchCount >= 2;
+}
+
 async function parseExcel(buffer: ArrayBuffer): Promise<Record<string, string>[]> {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false, defval: '' });
+  
+  // First try regular parsing
+  let jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false, defval: '' });
+  
+  if (jsonData.length === 0) {
+    return [];
+  }
+  
+  let headers = Object.keys(jsonData[0]);
+  
+  // Check if first row looks like a title row
+  if (!looksLikeHeaders(headers)) {
+    // Parse without headers to get raw data
+    const rawData = XLSX.utils.sheet_to_json<string[]>(sheet, { 
+      raw: false,
+      defval: '',
+      header: 1
+    });
+    
+    // Find the actual header row
+    let headerRowIndex = 0;
+    for (let i = 0; i < Math.min(5, rawData.length); i++) {
+      const row = rawData[i];
+      if (Array.isArray(row) && row.length >= 3) {
+        const nonEmpty = row.filter(cell => cell && cell.toString().trim() !== '');
+        if (nonEmpty.length >= 3 && looksLikeHeaders(row.map(String))) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // Re-parse with the correct header row
+    if (headerRowIndex > 0) {
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+      range.s.r = headerRowIndex;
+      sheet['!ref'] = XLSX.utils.encode_range(range);
+      
+      jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { 
+        raw: false,
+        defval: ''
+      });
+      
+      if (jsonData.length > 0) {
+        headers = Object.keys(jsonData[0]);
+      }
+    }
+  }
+  
+  // Clean up __EMPTY column names
+  const cleanHeaders = headers.map((h, i) => {
+    if (h.startsWith('__EMPTY')) {
+      return `Column_${i + 1}`;
+    }
+    return h;
+  });
+  
+  // Remap data with clean headers if needed
+  if (cleanHeaders.some((h, i) => h !== headers[i])) {
+    return jsonData.map(row => {
+      const newRow: Record<string, string> = {};
+      headers.forEach((h, i) => {
+        newRow[cleanHeaders[i]] = row[h] || '';
+      });
+      return newRow;
+    });
+  }
+  
+  return jsonData;
 }
 
 async function parsePDF(buffer: Buffer): Promise<Record<string, string>[]> {
@@ -64,7 +161,6 @@ async function parsePDF(buffer: Buffer): Promise<Record<string, string>[]> {
   const data: Record<string, string>[] = [];
   let headers: string[] = [];
   
-  // Try to find header row
   let headerIndex = -1;
   for (let i = 0; i < Math.min(20, lines.length); i++) {
     const line = lines[i].toLowerCase();
@@ -105,16 +201,23 @@ export async function POST(request: NextRequest) {
     }
 
     const mapping: ColumnMapping = JSON.parse(mappingJson);
-    if (!mapping.date || !mapping.productName) {
-      return NextResponse.json({ error: 'Date and Product Name are required' }, { status: 400 });
+    
+    // Only product name is strictly required now
+    if (!mapping.productName) {
+      return NextResponse.json({ error: 'Product Name mapping is required' }, { status: 400 });
     }
 
     const pharmacy = await getOrCreatePharmacy(pharmacyName);
     
     const fileName = file.name.toLowerCase();
+    const originalFileName = file.name;
     const fileExt = fileName.split('.').pop() || '';
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
     const isPDF = fileName.endsWith('.pdf');
+    
+    // Try to extract date from filename for files without date column
+    const filenameDate = extractDateFromFilename(originalFileName);
+    const fallbackDate = filenameDate || new Date();
     
     let rows: Record<string, string>[] = [];
     
@@ -137,9 +240,8 @@ export async function POST(request: NextRequest) {
         rows = result.data;
       }
     } catch (parseError) {
-      // Log failed upload
       await createUploadHistory({
-        file_name: file.name,
+        file_name: originalFileName,
         file_type: fileExt,
         file_size: file.size,
         pharmacy_id: pharmacy.id,
@@ -151,6 +253,20 @@ export async function POST(request: NextRequest) {
       throw parseError;
     }
 
+    if (rows.length === 0) {
+      await createUploadHistory({
+        file_name: originalFileName,
+        file_type: fileExt,
+        file_size: file.size,
+        pharmacy_id: pharmacy.id,
+        pharmacy_name: pharmacy.name,
+        row_count: 0,
+        status: 'failed',
+        error_message: 'No data rows found in file',
+      });
+      return NextResponse.json({ error: 'No data rows found in file' }, { status: 400 });
+    }
+
     const invoiceMap = new Map<string, {
       productName: string;
       productCode?: string;
@@ -160,14 +276,23 @@ export async function POST(request: NextRequest) {
       date: Date;
     }[]>();
 
-    for (const row of rows) {
-      const dateValue = row[mapping.date];
-      const date = parseDate(dateValue);
-      if (!date) continue;
+    let skippedRows = 0;
 
-      const dateKey = date.toISOString().split('T')[0];
+    for (const row of rows) {
+      // Get date from column or use fallback
+      let date: Date | null = null;
+      if (mapping.date && row[mapping.date]) {
+        date = parseDate(row[mapping.date]);
+      }
+      if (!date) {
+        date = fallbackDate;
+      }
+
       const productName = row[mapping.productName];
-      if (!productName) continue;
+      if (!productName || productName.trim() === '') {
+        skippedRows++;
+        continue;
+      }
 
       const quantity = mapping.quantity ? parseNumber(row[mapping.quantity]) : 1;
       const unitPrice = mapping.unitPrice ? parseNumber(row[mapping.unitPrice]) : undefined;
@@ -177,20 +302,39 @@ export async function POST(request: NextRequest) {
         totalPrice = unitPrice * quantity;
       }
       if (!totalPrice) {
+        // If no price info, just use quantity as the "value"
         totalPrice = quantity;
       }
 
       const item = {
-        productName,
-        productCode: mapping.productCode ? row[mapping.productCode] : undefined,
-        quantity,
+        productName: productName.trim(),
+        productCode: mapping.productCode ? row[mapping.productCode]?.trim() : undefined,
+        quantity: quantity || 1,
         unitPrice: unitPrice || (totalPrice && quantity ? totalPrice / quantity : undefined),
         totalPrice,
         date,
       };
 
+      const dateKey = date.toISOString().split('T')[0];
       if (!invoiceMap.has(dateKey)) invoiceMap.set(dateKey, []);
       invoiceMap.get(dateKey)!.push(item);
+    }
+
+    if (invoiceMap.size === 0) {
+      await createUploadHistory({
+        file_name: originalFileName,
+        file_type: fileExt,
+        file_size: file.size,
+        pharmacy_id: pharmacy.id,
+        pharmacy_name: pharmacy.name,
+        row_count: rows.length,
+        status: 'failed',
+        error_message: 'No valid data rows found (check Product Name mapping)',
+      });
+      return NextResponse.json({ 
+        error: 'No valid data rows found. Make sure the Product Name column is mapped correctly.',
+        skippedRows 
+      }, { status: 400 });
     }
 
     let totalInvoices = 0;
@@ -226,7 +370,7 @@ export async function POST(request: NextRequest) {
 
     // Log successful upload
     await createUploadHistory({
-      file_name: file.name,
+      file_name: originalFileName,
       file_type: fileExt,
       file_size: file.size,
       pharmacy_id: pharmacy.id,
@@ -249,9 +393,11 @@ export async function POST(request: NextRequest) {
       pharmacy: pharmacy.name,
       invoices: totalInvoices,
       items: totalItems,
+      skippedRows,
+      dateSource: mapping.date ? 'column' : (filenameDate ? 'filename' : 'current'),
     });
   } catch (error) {
     console.error('Error uploading file:', error);
-    return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to upload file', details: String(error) }, { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, FileUp, Check, AlertCircle, X, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Upload, FileUp, Check, AlertCircle, X, Clock, FileText, CheckCircle, XCircle, Info } from 'lucide-react';
 
 interface UploadHistory {
   id: number;
@@ -18,7 +18,7 @@ interface UploadHistory {
 }
 
 interface ColumnMapping {
-  date: string;
+  date?: string;  // Now optional
   productName: string;
   productCode?: string;
   quantity?: string;
@@ -31,6 +31,7 @@ interface PreviewData {
   preview: Record<string, string>[];
   detectedMapping: ColumnMapping;
   rowCount: number;
+  skippedRows?: number;
 }
 
 export default function UploadPage() {
@@ -38,12 +39,11 @@ export default function UploadPage() {
   const [pharmacyName, setPharmacyName] = useState('');
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>({
-    date: '',
     productName: '',
   });
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
+  const [result, setResult] = useState<{ success?: boolean; message?: string; error?: string; dateSource?: string } | null>(null);
   const [uploadHistory, setUploadHistory] = useState<UploadHistory[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,7 +82,7 @@ export default function UploadPage() {
 
       const data: PreviewData = await res.json();
       setPreview(data);
-      setMapping(data.detectedMapping);
+      setMapping(data.detectedMapping || { productName: '' });
     } catch (error) {
       setResult({ error: 'Failed to parse file. Please check the format.' });
     } finally {
@@ -107,8 +107,9 @@ export default function UploadPage() {
   };
 
   const handleUpload = async () => {
-    if (!file || !pharmacyName || !mapping.date || !mapping.productName) {
-      setResult({ error: 'Please complete all required fields' });
+    // Only product name is required now
+    if (!file || !pharmacyName || !mapping.productName) {
+      setResult({ error: 'Please enter a pharmacy name and select the Product Name column' });
       return;
     }
 
@@ -128,13 +129,21 @@ export default function UploadPage() {
 
       const data = await res.json();
       if (res.ok) {
+        let dateInfo = '';
+        if (data.dateSource === 'filename') {
+          dateInfo = ' (date extracted from filename)';
+        } else if (data.dateSource === 'current') {
+          dateInfo = ' (using today\'s date)';
+        }
+        
         setResult({
           success: true,
-          message: `Successfully uploaded ${data.invoices} invoices with ${data.items} items for ${data.pharmacy}`,
+          message: `Successfully uploaded ${data.invoices} invoice(s) with ${data.items} items for ${data.pharmacy}${dateInfo}`,
+          dateSource: data.dateSource,
         });
         setFile(null);
         setPreview(null);
-        setMapping({ date: '', productName: '' });
+        setMapping({ productName: '' });
         setPharmacyName('');
         fetchUploadHistory();
       } else {
@@ -150,7 +159,7 @@ export default function UploadPage() {
   const resetUpload = () => {
     setFile(null);
     setPreview(null);
-    setMapping({ date: '', productName: '' });
+    setMapping({ productName: '' });
     setResult(null);
   };
 
@@ -168,6 +177,9 @@ export default function UploadPage() {
       minute: '2-digit',
     });
   };
+
+  // Check if a date column was detected
+  const hasDateColumn = mapping.date && mapping.date !== '';
 
   return (
     <div className="space-y-8 fade-in">
@@ -253,17 +265,31 @@ export default function UploadPage() {
                   <label className="block text-sm font-medium text-[#1a1a1a] mb-3">
                     Column Mapping
                   </label>
+                  
+                  {/* Info message if no date column */}
+                  {!hasDateColumn && (
+                    <div className="mb-4 p-3 bg-[#d4a853]/10 border border-[#d4a853]/30 rounded-lg flex items-start gap-3">
+                      <Info className="w-5 h-5 text-[#d4a853] mt-0.5 flex-shrink-0" />
+                      <div className="text-sm">
+                        <p className="font-medium text-[#b08a3f]">No date column detected</p>
+                        <p className="text-[#8a6a2f]">
+                          The date will be extracted from the filename or use today's date.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs text-[#404040] mb-1">
-                        Date Column <span className="text-[#c27272]">*</span>
+                        Date Column {hasDateColumn ? '' : '(optional)'}
                       </label>
                       <select
-                        value={mapping.date}
-                        onChange={(e) => setMapping({ ...mapping, date: e.target.value })}
+                        value={mapping.date || ''}
+                        onChange={(e) => setMapping({ ...mapping, date: e.target.value || undefined })}
                         className="select"
                       >
-                        <option value="">Select...</option>
+                        <option value="">None (use filename/today)</option>
                         {preview.headers.map((h) => (
                           <option key={h} value={h}>{h}</option>
                         ))}
@@ -377,7 +403,7 @@ export default function UploadPage() {
                   </button>
                   <button
                     onClick={handleUpload}
-                    disabled={uploading || !pharmacyName || !mapping.date || !mapping.productName}
+                    disabled={uploading || !pharmacyName || !mapping.productName}
                     className="btn btn-primary"
                   >
                     {uploading ? (
