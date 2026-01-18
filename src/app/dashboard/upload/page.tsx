@@ -51,11 +51,11 @@ export default function UploadPage() {
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
     const fileName = droppedFile?.name.toLowerCase() || '';
-    if (droppedFile && (fileName.endsWith('.csv') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls'))) {
+    if (droppedFile && (fileName.endsWith('.csv') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.pdf'))) {
       setFile(droppedFile);
       handleFilePreview(droppedFile);
     } else {
-      setError('Please upload a CSV or Excel file');
+      setError('Please upload a CSV, Excel, or PDF file');
     }
   }, []);
 
@@ -221,18 +221,18 @@ export default function UploadPage() {
                 <p className="text-base font-medium text-[#1a1a1a] mb-1">
                   Drop your file here
                 </p>
-                <p className="text-sm text-[#404040]">Supports CSV and Excel (.xlsx, .xls) files</p>
+                <p className="text-sm text-[#404040]">Supports CSV, Excel (.xlsx, .xls), and PDF files</p>
               </div>
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx,.xls,.pdf"
                 onChange={handleFileSelect}
                 className="hidden"
                 id="file-upload"
               />
               <label htmlFor="file-upload" className="btn btn-primary cursor-pointer">
                 <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1.75} />
-                Select CSV or Excel File
+                Select File
               </label>
             </div>
           </div>
