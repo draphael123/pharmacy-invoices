@@ -221,7 +221,7 @@ export default function UploadPage() {
                 <p className="text-base font-medium text-[#1a1a1a] mb-1">
                   Drop your file here
                 </p>
-                <p className="text-sm text-[#404040]">Supports CSV and Excel (.xlsx) files</p>
+                <p className="text-sm text-[#404040]">Supports CSV and Excel (.xlsx, .xls) files</p>
               </div>
               <input
                 type="file"
