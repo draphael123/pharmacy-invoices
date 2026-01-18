@@ -50,11 +50,12 @@ export default function UploadPage() {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.name.endsWith('.csv')) {
+    const fileName = droppedFile?.name.toLowerCase() || '';
+    if (droppedFile && (fileName.endsWith('.csv') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls'))) {
       setFile(droppedFile);
       handleFilePreview(droppedFile);
     } else {
-      setError('Please upload a CSV file');
+      setError('Please upload a CSV or Excel file');
     }
   }, []);
 
@@ -218,20 +219,20 @@ export default function UploadPage() {
               </div>
               <div className="text-center">
                 <p className="text-base font-medium text-[#1a1a1a] mb-1">
-                  Drop your CSV file here
+                  Drop your file here
                 </p>
-                <p className="text-sm text-[#404040]">or click to browse</p>
+                <p className="text-sm text-[#404040]">Supports CSV and Excel (.xlsx) files</p>
               </div>
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileSelect}
                 className="hidden"
                 id="file-upload"
               />
               <label htmlFor="file-upload" className="btn btn-primary cursor-pointer">
                 <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1.75} />
-                Select File
+                Select CSV or Excel File
               </label>
             </div>
           </div>
@@ -281,9 +282,9 @@ export default function UploadPage() {
               {[
                 { key: 'date', label: 'Date', required: true },
                 { key: 'productName', label: 'Product Name', required: true },
-                { key: 'totalPrice', label: 'Total Price', required: true },
-                { key: 'productCode', label: 'Product Code', required: false },
                 { key: 'quantity', label: 'Quantity', required: false },
+                { key: 'productCode', label: 'Product Code', required: false },
+                { key: 'totalPrice', label: 'Total Price', required: false, hint: 'Optional - uses quantity if not provided' },
                 { key: 'unitPrice', label: 'Unit Price', required: false },
               ].map((field) => (
                 <div key={field.key}>
@@ -344,7 +345,7 @@ export default function UploadPage() {
             </button>
             <button
               onClick={handleUpload}
-              disabled={!pharmacyName || !mapping.date || !mapping.productName || !mapping.totalPrice}
+              disabled={!pharmacyName || !mapping.date || !mapping.productName}
               className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Upload
