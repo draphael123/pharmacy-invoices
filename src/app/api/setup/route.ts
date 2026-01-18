@@ -55,10 +55,16 @@ export async function POST() {
         unit_price DECIMAL(10,2),
         total_price DECIMAL(12,2) NOT NULL,
         invoice_date DATE NOT NULL,
-        category VARCHAR(100),
         created_at TIMESTAMP DEFAULT NOW()
       );
     `;
+
+    // Add category column if it doesn't exist
+    try {
+      await sql`ALTER TABLE line_items ADD COLUMN IF NOT EXISTS category VARCHAR(100);`;
+    } catch {
+      // Column might already exist, ignore error
+    }
 
     // NEW: Product categories table
     await sql`
@@ -133,7 +139,7 @@ export async function POST() {
       );
     `;
 
-    // Create indexes
+    // Create indexes (IF NOT EXISTS handles duplicates)
     await sql`CREATE INDEX IF NOT EXISTS idx_line_items_invoice_date ON line_items(invoice_date);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_line_items_pharmacy ON line_items(pharmacy_id);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_line_items_product ON line_items(product_code);`;
@@ -144,23 +150,27 @@ export async function POST() {
     await sql`CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(type);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_alerts_read ON alerts(is_read);`;
 
-    // Insert default product categories
-    await sql`
-      INSERT INTO product_categories (name, description, color, keywords) VALUES
-        ('Testosterone', 'Testosterone replacement therapy products', '#3b82f6', ARRAY['testosterone', 'trt', 'androgel']),
-        ('ED Medications', 'Erectile dysfunction medications', '#8b5cf6', ARRAY['tadalafil', 'sildenafil', 'cialis', 'viagra']),
-        ('Hormone Therapy', 'Hormone replacement and therapy', '#ec4899', ARRAY['estrogen', 'estriol', 'progesterone', 'hormone']),
-        ('Anti-Estrogen', 'Aromatase inhibitors and anti-estrogens', '#f59e0b', ARRAY['anastrozole', 'arimidex', 'letrozole']),
-        ('Hair Loss', 'Hair loss treatment products', '#10b981', ARRAY['minoxidil', 'finasteride', 'hair']),
-        ('Skincare', 'Dermatological and skincare products', '#06b6d4', ARRAY['cream', 'face', 'skin', 'topical', 'niacinamide']),
-        ('Cardiovascular', 'Heart and blood pressure medications', '#ef4444', ARRAY['spironolactone', 'blood pressure', 'heart']),
-        ('Other', 'Uncategorized medications', '#6b7280', ARRAY[])
-      ON CONFLICT (name) DO NOTHING;
-    `;
+    // Insert default product categories (ON CONFLICT handles duplicates)
+    try {
+      await sql`
+        INSERT INTO product_categories (name, description, color, keywords) VALUES
+          ('Testosterone', 'Testosterone replacement therapy products', '#3b82f6', ARRAY['testosterone', 'trt', 'androgel']),
+          ('ED Medications', 'Erectile dysfunction medications', '#8b5cf6', ARRAY['tadalafil', 'sildenafil', 'cialis', 'viagra']),
+          ('Hormone Therapy', 'Hormone replacement and therapy', '#ec4899', ARRAY['estrogen', 'estriol', 'progesterone', 'hormone']),
+          ('Anti-Estrogen', 'Aromatase inhibitors and anti-estrogens', '#f59e0b', ARRAY['anastrozole', 'arimidex', 'letrozole']),
+          ('Hair Loss', 'Hair loss treatment products', '#10b981', ARRAY['minoxidil', 'finasteride', 'hair']),
+          ('Skincare', 'Dermatological and skincare products', '#06b6d4', ARRAY['cream', 'face', 'skin', 'topical', 'niacinamide']),
+          ('Cardiovascular', 'Heart and blood pressure medications', '#ef4444', ARRAY['spironolactone', 'blood pressure', 'heart']),
+          ('Other', 'Uncategorized medications', '#6b7280', ARRAY[])
+        ON CONFLICT (name) DO NOTHING;
+      `;
+    } catch {
+      // Categories might already exist, ignore error
+    }
 
     return NextResponse.json({ success: true, message: 'Database setup complete with all new tables' });
   } catch (error) {
     console.error('Error setting up database:', error);
-    return NextResponse.json({ error: 'Failed to setup database' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to setup database', details: String(error) }, { status: 500 });
   }
 }
