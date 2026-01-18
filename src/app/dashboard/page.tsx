@@ -8,6 +8,10 @@ import {
   FileText, 
   TrendingUp, 
   TrendingDown,
+  Bell,
+  Download,
+  Calendar,
+  X,
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -16,12 +20,13 @@ import {
   PointElement,
   LineElement,
   BarElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend,
   Filler,
 } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
 
 ChartJS.register(
   CategoryScale,
@@ -29,6 +34,7 @@ ChartJS.register(
   PointElement,
   LineElement,
   BarElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend,
@@ -56,41 +62,75 @@ interface TopProduct {
   product_code: string | null;
   total_quantity: number;
   total_revenue: number;
+  category: string;
 }
+
+interface CategoryStat {
+  category: string;
+  total_quantity: number;
+  total_revenue: number;
+  product_count: number;
+}
+
+interface Alert {
+  id: number;
+  type: string;
+  severity: string;
+  title: string;
+  message: string;
+  created_at: string;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Testosterone': '#3b82f6',
+  'ED Medications': '#8b5cf6',
+  'Hormone Therapy': '#ec4899',
+  'Anti-Estrogen': '#f59e0b',
+  'Hair Loss': '#10b981',
+  'Skincare': '#06b6d4',
+  'Cardiovascular': '#ef4444',
+  'Other': '#6b7280',
+};
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [spendData, setSpendData] = useState<SpendData[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
+    start: '',
+    end: '',
+  });
+  const [showDateFilter, setShowDateFilter] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsRes, spendRes, productsRes] = await Promise.all([
-        fetch('/api/dashboard/stats'),
-        fetch(`/api/dashboard/spend?period=${period}`),
-        fetch('/api/dashboard/top-products?limit=5'),
+      const dateParams = dateRange.start && dateRange.end 
+        ? `&start_date=${dateRange.start}&end_date=${dateRange.end}` 
+        : '';
+
+      const [statsRes, spendRes, productsRes, categoryRes, alertsRes] = await Promise.all([
+        fetch(`/api/dashboard/stats${dateParams ? '?' + dateParams.slice(1) : ''}`),
+        fetch(`/api/dashboard/spend?period=${period}${dateParams}`),
+        fetch(`/api/dashboard/top-products?limit=5${dateParams}`),
+        fetch(`/api/categories?include_stats=true${dateParams}`),
+        fetch('/api/alerts?unread_only=true'),
       ]);
 
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(statsData);
-      }
-      if (spendRes.ok) {
-        const spendDataRes = await spendRes.json();
-        setSpendData(spendDataRes);
-      }
-      if (productsRes.ok) {
-        const productsData = await productsRes.json();
-        setTopProducts(productsData);
-      }
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (spendRes.ok) setSpendData(await spendRes.json());
+      if (productsRes.ok) setTopProducts(await productsRes.json());
+      if (categoryRes.ok) setCategoryStats(await categoryRes.json());
+      if (alertsRes.ok) setAlerts(await alertsRes.json());
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [period, dateRange]);
 
   useEffect(() => {
     fetchData();
@@ -107,6 +147,23 @@ export default function DashboardPage() {
 
   const formatNumber = (value: number) => {
     return new Intl.NumberFormat('en-US').format(value);
+  };
+
+  const handleExport = async () => {
+    const params = new URLSearchParams({ format: 'csv' });
+    if (dateRange.start) params.append('start_date', dateRange.start);
+    if (dateRange.end) params.append('end_date', dateRange.end);
+    
+    window.location.href = `/api/export?${params.toString()}`;
+  };
+
+  const dismissAlert = async (id: number) => {
+    await fetch('/api/alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'dismiss', id }),
+    });
+    setAlerts(alerts.filter(a => a.id !== id));
   };
 
   const spendChartData = {
@@ -128,19 +185,24 @@ export default function DashboardPage() {
     ],
   };
 
+  const categoryChartData = {
+    labels: categoryStats.map(c => c.category),
+    datasets: [
+      {
+        data: categoryStats.map(c => c.total_revenue),
+        backgroundColor: categoryStats.map(c => CATEGORY_COLORS[c.category] || '#6b7280'),
+        borderWidth: 0,
+      },
+    ],
+  };
+
   const topProductsChartData = {
     labels: topProducts.map(p => p.product_name.length > 25 ? p.product_name.substring(0, 25) + '...' : p.product_name),
     datasets: [
       {
         label: 'Revenue',
         data: topProducts.map(p => p.total_revenue),
-        backgroundColor: [
-          '#1a1a1a',
-          '#404040',
-          '#7c9a82',
-          '#c9b8a8',
-          '#d4a853',
-        ],
+        backgroundColor: topProducts.map(p => CATEGORY_COLORS[p.category] || '#6b7280'),
         borderRadius: 4,
         borderSkipped: false,
       },
@@ -151,9 +213,7 @@ export default function DashboardPage() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        display: false,
-      },
+      legend: { display: false },
       tooltip: {
         backgroundColor: '#1a1a1a',
         titleColor: '#ffffff',
@@ -165,40 +225,33 @@ export default function DashboardPage() {
     },
     scales: {
       x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          color: '#404040',
-          font: {
-            size: 11,
-          },
-        },
+        grid: { display: false },
+        ticks: { color: '#404040', font: { size: 11 } },
       },
       y: {
-        grid: {
-          color: '#e8e4df',
-        },
-        ticks: {
-          color: '#404040',
-          font: {
-            size: 11,
-          },
-        },
-        border: {
-          display: false,
-        },
+        grid: { color: '#e8e4df' },
+        ticks: { color: '#404040', font: { size: 11 } },
+        border: { display: false },
       },
     },
   } as const;
 
   const barChartOptions = {
+    ...chartOptions,
+    indexAxis: 'y' as const,
+    scales: {
+      ...chartOptions.scales,
+      y: { grid: { display: false }, ticks: { color: '#404040', font: { size: 11 } } },
+    },
+  } as const;
+
+  const doughnutOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    indexAxis: 'y' as const,
     plugins: {
       legend: {
-        display: false,
+        position: 'right' as const,
+        labels: { color: '#404040', font: { size: 11 }, padding: 12 },
       },
       tooltip: {
         backgroundColor: '#1a1a1a',
@@ -206,37 +259,9 @@ export default function DashboardPage() {
         bodyColor: '#e8e4df',
         padding: 12,
         cornerRadius: 6,
-        displayColors: false,
       },
     },
-    scales: {
-      x: {
-        grid: {
-          color: '#e8e4df',
-        },
-        ticks: {
-          color: '#404040',
-          font: {
-            size: 11,
-          },
-        },
-        border: {
-          display: false,
-        },
-      },
-      y: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          color: '#404040',
-          font: {
-            size: 11,
-          },
-        },
-      },
-    },
-  } as const;
+  };
 
   if (loading) {
     return (
@@ -255,59 +280,99 @@ export default function DashboardPage() {
   }
 
   const statCards = [
-    {
-      label: 'Total Spend',
-      value: formatCurrency(stats?.total_spend || 0),
-      icon: DollarSign,
-      accent: 'bg-[#1a1a1a]',
-    },
-    {
-      label: 'Items Sold',
-      value: formatNumber(stats?.total_items || 0),
-      icon: Package,
-      accent: 'bg-[#7c9a82]',
-    },
-    {
-      label: 'Pharmacies',
-      value: formatNumber(stats?.pharmacy_count || 0),
-      icon: Building2,
-      accent: 'bg-[#d4a853]',
-    },
-    {
-      label: 'Invoices',
-      value: formatNumber(stats?.invoice_count || 0),
-      icon: FileText,
-      accent: 'bg-[#c9b8a8]',
-    },
+    { label: 'Total Spend', value: formatCurrency(stats?.total_spend || 0), icon: DollarSign, accent: 'bg-[#1a1a1a]' },
+    { label: 'Items Sold', value: formatNumber(stats?.total_items || 0), icon: Package, accent: 'bg-[#7c9a82]' },
+    { label: 'Pharmacies', value: formatNumber(stats?.pharmacy_count || 0), icon: Building2, accent: 'bg-[#d4a853]' },
+    { label: 'Invoices', value: formatNumber(stats?.invoice_count || 0), icon: FileText, accent: 'bg-[#c9b8a8]' },
   ];
 
   return (
     <div className="space-y-8 fade-in">
+      {/* Alerts Banner */}
+      {alerts.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <Bell className="w-5 h-5 text-amber-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">{alerts.length} new alert{alerts.length > 1 ? 's' : ''}</p>
+              <p className="text-sm text-amber-600">{alerts[0]?.title}</p>
+            </div>
+            <button onClick={() => dismissAlert(alerts[0].id)} className="text-amber-600 hover:text-amber-800">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="page-title">Overview</h1>
           <p className="page-subtitle">Track pharmacy spend and product demand</p>
         </div>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value as 'week' | 'month' | 'year')}
-          className="select !w-auto text-sm"
-        >
-          <option value="week">Weekly</option>
-          <option value="month">Monthly</option>
-          <option value="year">Yearly</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Filter Toggle */}
+          <button 
+            onClick={() => setShowDateFilter(!showDateFilter)}
+            className={`btn btn-secondary text-sm ${showDateFilter ? 'border-[#7c9a82]' : ''}`}
+          >
+            <Calendar className="w-4 h-4 mr-2" strokeWidth={1.75} />
+            {dateRange.start && dateRange.end ? `${dateRange.start} - ${dateRange.end}` : 'All Time'}
+          </button>
+          
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as 'week' | 'month' | 'year')}
+            className="select !w-auto text-sm"
+          >
+            <option value="week">Weekly</option>
+            <option value="month">Monthly</option>
+            <option value="year">Yearly</option>
+          </select>
+
+          <button onClick={handleExport} className="btn btn-secondary text-sm">
+            <Download className="w-4 h-4 mr-2" strokeWidth={1.75} />
+            Export
+          </button>
+        </div>
       </div>
+
+      {/* Date Range Picker */}
+      {showDateFilter && (
+        <div className="card flex flex-wrap items-center gap-4">
+          <div>
+            <label className="block text-xs font-medium text-[#404040] mb-1">Start Date</label>
+            <input
+              type="date"
+              value={dateRange.start}
+              onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+              className="input !w-auto text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#404040] mb-1">End Date</label>
+            <input
+              type="date"
+              value={dateRange.end}
+              onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+              className="input !w-auto text-sm"
+            />
+          </div>
+          <div className="flex items-end gap-2">
+            <button 
+              onClick={() => setDateRange({ start: '', end: '' })}
+              className="btn btn-secondary text-sm"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {statCards.map((stat, index) => (
-          <div 
-            key={stat.label} 
-            className={`card slide-up stagger-${index + 1}`}
-            style={{ animationFillMode: 'backwards' }}
-          >
+          <div key={stat.label} className={`card slide-up stagger-${index + 1}`} style={{ animationFillMode: 'backwards' }}>
             <div className="flex items-center gap-3 mb-3">
               <div className={`w-9 h-9 rounded-lg ${stat.accent} flex items-center justify-center`}>
                 <stat.icon className="w-[18px] h-[18px] text-white" strokeWidth={1.75} />
@@ -350,9 +415,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Spend Trend */}
+        <div className="card lg:col-span-2">
           <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Spend Trend</h3>
           <div className="chart-container">
             {spendData.length > 0 ? (
@@ -365,21 +431,36 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Category Breakdown */}
         <div className="card">
-          <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Top Products</h3>
-          <div className="chart-container">
-            {topProducts.length > 0 ? (
-              <Bar data={topProductsChartData} options={barChartOptions} />
+          <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">By Category</h3>
+          <div className="h-[260px]">
+            {categoryStats.length > 0 ? (
+              <Doughnut data={categoryChartData} options={doughnutOptions} />
             ) : (
               <div className="flex items-center justify-center h-full text-[#404040]">
-                <p className="text-sm">Upload invoices to see products</p>
+                <p className="text-sm">No category data</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Top Products Table */}
+      {/* Top Products */}
+      <div className="card">
+        <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Top Products</h3>
+        <div className="chart-container">
+          {topProducts.length > 0 ? (
+            <Bar data={topProductsChartData} options={barChartOptions} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-[#404040]">
+              <p className="text-sm">Upload invoices to see products</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Products Table */}
       {topProducts.length > 0 && (
         <div className="card">
           <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Top Performing Products</h3>
@@ -388,7 +469,7 @@ export default function DashboardPage() {
               <thead>
                 <tr>
                   <th>Product</th>
-                  <th>Code</th>
+                  <th>Category</th>
                   <th className="text-right">Quantity</th>
                   <th className="text-right">Revenue</th>
                 </tr>
@@ -397,11 +478,19 @@ export default function DashboardPage() {
                 {topProducts.map((product, index) => (
                   <tr key={index}>
                     <td className="font-medium">{product.product_name}</td>
-                    <td className="text-[#404040] font-mono text-sm">{product.product_code || '—'}</td>
-                    <td className="text-right tabular-nums">{formatNumber(product.total_quantity)}</td>
-                    <td className="text-right font-medium tabular-nums">
-                      {formatCurrency(product.total_revenue)}
+                    <td>
+                      <span 
+                        className="px-2 py-1 rounded text-xs font-medium"
+                        style={{ 
+                          backgroundColor: `${CATEGORY_COLORS[product.category] || '#6b7280'}15`,
+                          color: CATEGORY_COLORS[product.category] || '#6b7280'
+                        }}
+                      >
+                        {product.category}
+                      </span>
                     </td>
+                    <td className="text-right tabular-nums">{formatNumber(product.total_quantity)}</td>
+                    <td className="text-right font-medium tabular-nums">{formatCurrency(product.total_revenue)}</td>
                   </tr>
                 ))}
               </tbody>

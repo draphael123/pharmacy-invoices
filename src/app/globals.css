@@ -14,6 +14,7 @@
   --color-success: #6b9a6b;
   --color-warning: #d4a853;
   --color-error: #c27272;
+  --sidebar-width: 14rem;
 }
 
 * {
@@ -66,6 +67,7 @@ body::before {
   cursor: pointer;
   border: none;
   outline: none;
+  white-space: nowrap;
 }
 
 .btn:focus {
@@ -81,6 +83,12 @@ body::before {
 .btn-primary:hover {
   background: var(--color-charcoal);
   transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background: var(--color-clay);
+  cursor: not-allowed;
+  transform: none;
 }
 
 .btn-secondary {
@@ -392,4 +400,228 @@ body::before {
 /* Number formatting */
 .tabular-nums {
   font-feature-settings: 'tnum';
+}
+
+/* ============================================ */
+/* MOBILE RESPONSIVE STYLES */
+/* ============================================ */
+
+/* Mobile sidebar toggle button */
+.mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid var(--color-mist);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* Mobile overlay */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 26, 26, 0.5);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-overlay.active {
+  opacity: 1;
+}
+
+/* Tablet styles */
+@media (max-width: 1024px) {
+  .chart-container {
+    height: 250px;
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  .card {
+    padding: 1.25rem;
+  }
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0;
+  }
+
+  .mobile-menu-toggle {
+    display: flex;
+  }
+  
+  .mobile-overlay {
+    display: block;
+  }
+
+  /* Sidebar on mobile */
+  .sidebar-mobile {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 50;
+  }
+
+  .sidebar-mobile.open {
+    transform: translateX(0);
+  }
+
+  /* Main content adjustments */
+  .main-content-mobile {
+    margin-left: 0 !important;
+    padding: 1rem;
+    padding-top: 4rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.8rem;
+  }
+
+  /* Cards */
+  .card {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+  }
+
+  /* Charts */
+  .chart-container {
+    height: 200px;
+  }
+
+  /* Tables - horizontal scroll */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table {
+    min-width: 600px;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  /* Inputs */
+  .input,
+  .select {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8rem;
+  }
+
+  /* Flex adjustments for mobile */
+  .mobile-stack {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+
+  .mobile-full-width {
+    width: 100% !important;
+  }
+
+  /* Hide text on mobile, show icons only */
+  .mobile-icon-only span {
+    display: none;
+  }
+
+  .mobile-icon-only {
+    padding: 0.5rem;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 1.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.125rem;
+  }
+
+  .chart-container {
+    height: 180px;
+  }
+
+  /* Stack grid items */
+  .mobile-grid-1 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .select,
+  .input {
+    min-height: 44px; /* Apple's recommended touch target size */
+  }
+
+  /* Disable hover effects on touch devices */
+  .card:hover {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .table tr:hover td {
+    background: transparent;
+  }
+}
+
+/* Print styles */
+@media print {
+  body::before {
+    display: none;
+  }
+
+  .card {
+    box-shadow: none;
+    border: 1px solid #ddd;
+  }
+
+  .btn,
+  .mobile-menu-toggle,
+  nav {
+    display: none !important;
+  }
 }

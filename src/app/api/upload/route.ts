@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { getOrCreatePharmacy, createInvoice, createLineItems } from '@/lib/db';
+import { getOrCreatePharmacy, createInvoice, createLineItems, createUploadHistory, detectAnomalies } from '@/lib/db';
 
 interface ColumnMapping {
   date: string;
@@ -112,27 +112,43 @@ export async function POST(request: NextRequest) {
     const pharmacy = await getOrCreatePharmacy(pharmacyName);
     
     const fileName = file.name.toLowerCase();
+    const fileExt = fileName.split('.').pop() || '';
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
     const isPDF = fileName.endsWith('.pdf');
     
     let rows: Record<string, string>[] = [];
     
-    if (isPDF) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      rows = await parsePDF(buffer);
-    } else if (isExcel) {
-      const buffer = await file.arrayBuffer();
-      rows = await parseExcel(buffer);
-    } else {
-      const text = await file.text();
-      const result = await new Promise<Papa.ParseResult<Record<string, string>>>((resolve) => {
-        Papa.parse(text, {
-          header: true,
-          skipEmptyLines: true,
-          complete: resolve,
+    try {
+      if (isPDF) {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        rows = await parsePDF(buffer);
+      } else if (isExcel) {
+        const buffer = await file.arrayBuffer();
+        rows = await parseExcel(buffer);
+      } else {
+        const text = await file.text();
+        const result = await new Promise<Papa.ParseResult<Record<string, string>>>((resolve) => {
+          Papa.parse(text, {
+            header: true,
+            skipEmptyLines: true,
+            complete: resolve,
+          });
         });
+        rows = result.data;
+      }
+    } catch (parseError) {
+      // Log failed upload
+      await createUploadHistory({
+        file_name: file.name,
+        file_type: fileExt,
+        file_size: file.size,
+        pharmacy_id: pharmacy.id,
+        pharmacy_name: pharmacy.name,
+        row_count: 0,
+        status: 'failed',
+        error_message: parseError instanceof Error ? parseError.message : 'Parse error',
       });
-      rows = result.data;
+      throw parseError;
     }
 
     const invoiceMap = new Map<string, {
@@ -206,6 +222,26 @@ export async function POST(request: NextRequest) {
 
       totalInvoices++;
       totalItems += items.length;
+    }
+
+    // Log successful upload
+    await createUploadHistory({
+      file_name: file.name,
+      file_type: fileExt,
+      file_size: file.size,
+      pharmacy_id: pharmacy.id,
+      pharmacy_name: pharmacy.name,
+      row_count: rows.length,
+      invoice_count: totalInvoices,
+      item_count: totalItems,
+      status: 'completed',
+    });
+
+    // Run anomaly detection after upload
+    try {
+      await detectAnomalies();
+    } catch (e) {
+      console.error('Anomaly detection failed:', e);
     }
 
     return NextResponse.json({

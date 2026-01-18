@@ -1,13 +1,20 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, X, ArrowRight, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Upload, FileUp, Check, AlertCircle, X, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
 
-interface PreviewData {
-  headers: string[];
-  preview: Record<string, string>[];
-  detectedMapping: Record<string, string>;
-  rowCount: number;
+interface UploadHistory {
+  id: number;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  pharmacy_name: string;
+  row_count: number;
+  invoice_count: number;
+  item_count: number;
+  status: string;
+  error_message: string | null;
+  uploaded_at: string;
 }
 
 interface ColumnMapping {
@@ -16,7 +23,14 @@ interface ColumnMapping {
   productCode?: string;
   quantity?: string;
   unitPrice?: string;
-  totalPrice: string;
+  totalPrice?: string;
+}
+
+interface PreviewData {
+  headers: string[];
+  preview: Record<string, string>[];
+  detectedMapping: ColumnMapping;
+  rowCount: number;
 }
 
 export default function UploadPage() {
@@ -26,371 +40,434 @@ export default function UploadPage() {
   const [mapping, setMapping] = useState<ColumnMapping>({
     date: '',
     productName: '',
-    productCode: '',
-    quantity: '',
-    unitPrice: '',
-    totalPrice: '',
   });
-  const [step, setStep] = useState<'upload' | 'preview' | 'mapping' | 'processing' | 'complete'>('upload');
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ pharmacy: string; invoices: number; items: number } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
+  const [uploadHistory, setUploadHistory] = useState<UploadHistory[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
+  useEffect(() => {
+    fetchUploadHistory();
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const droppedFile = e.dataTransfer.files[0];
-    const fileName = droppedFile?.name.toLowerCase() || '';
-    if (droppedFile && (fileName.endsWith('.csv') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.pdf'))) {
-      setFile(droppedFile);
-      handleFilePreview(droppedFile);
-    } else {
-      setError('Please upload a CSV, Excel, or PDF file');
-    }
-  }, []);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      handleFilePreview(selectedFile);
+  const fetchUploadHistory = async () => {
+    try {
+      const res = await fetch('/api/upload-history?limit=10');
+      if (res.ok) {
+        const data = await res.json();
+        setUploadHistory(data);
+      }
+    } catch (error) {
+      console.error('Error fetching upload history:', error);
     }
   };
 
-  const handleFilePreview = async (file: File) => {
-    setError(null);
-    setStep('preview');
-
-    const formData = new FormData();
-    formData.append('file', file);
+  const handleFileSelect = async (selectedFile: File) => {
+    setFile(selectedFile);
+    setResult(null);
+    setLoading(true);
 
     try {
-      const response = await fetch('/api/upload/preview', {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const res = await fetch('/api/upload/preview', {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to preview file');
-      }
+      if (!res.ok) throw new Error('Failed to parse file');
 
-      const data: PreviewData = await response.json();
+      const data: PreviewData = await res.json();
       setPreview(data);
-      
-      setMapping({
-        date: data.detectedMapping.date || '',
-        productName: data.detectedMapping.productName || '',
-        productCode: data.detectedMapping.productCode || '',
-        quantity: data.detectedMapping.quantity || '',
-        unitPrice: data.detectedMapping.unitPrice || '',
-        totalPrice: data.detectedMapping.totalPrice || '',
-      });
-
-      setStep('mapping');
-    } catch {
-      setError('Failed to preview file. Please check the format.');
-      setStep('upload');
+      setMapping(data.detectedMapping);
+    } catch (error) {
+      setResult({ error: 'Failed to parse file. Please check the format.' });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) handleFileSelect(droppedFile);
   };
 
   const handleUpload = async () => {
-    if (!file || !pharmacyName || !mapping.date || !mapping.productName || !mapping.totalPrice) {
-      setError('Please fill in all required fields');
+    if (!file || !pharmacyName || !mapping.date || !mapping.productName) {
+      setResult({ error: 'Please complete all required fields' });
       return;
     }
 
-    setStep('processing');
-    setError(null);
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('pharmacyName', pharmacyName);
-    formData.append('mapping', JSON.stringify(mapping));
+    setUploading(true);
+    setResult(null);
 
     try {
-      const response = await fetch('/api/upload', {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('pharmacyName', pharmacyName);
+      formData.append('mapping', JSON.stringify(mapping));
+
+      const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+      const data = await res.json();
+      if (res.ok) {
+        setResult({
+          success: true,
+          message: `Successfully uploaded ${data.invoices} invoices with ${data.items} items for ${data.pharmacy}`,
+        });
+        setFile(null);
+        setPreview(null);
+        setMapping({ date: '', productName: '' });
+        setPharmacyName('');
+        fetchUploadHistory();
+      } else {
+        setResult({ error: data.error || 'Upload failed' });
       }
-
-      setResult(data);
-      setStep('complete');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-      setStep('mapping');
+    } catch (error) {
+      setResult({ error: 'Upload failed. Please try again.' });
+    } finally {
+      setUploading(false);
     }
   };
 
   const resetUpload = () => {
     setFile(null);
-    setPharmacyName('');
     setPreview(null);
-    setMapping({
-      date: '',
-      productName: '',
-      productCode: '',
-      quantity: '',
-      unitPrice: '',
-      totalPrice: '',
-    });
-    setStep('upload');
-    setError(null);
+    setMapping({ date: '', productName: '' });
     setResult(null);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   return (
     <div className="space-y-8 fade-in">
-      {/* Header */}
       <div>
-        <h1 className="page-title">Upload Data</h1>
-        <p className="page-subtitle">Import CSV invoice files from pharmacy partners</p>
+        <h1 className="page-title">Upload Invoices</h1>
+        <p className="page-subtitle">Import invoice data from CSV, Excel, or PDF files</p>
       </div>
 
-      {/* Progress Steps */}
-      <div className="flex items-center gap-3">
-        {['Upload', 'Map Columns', 'Complete'].map((label, index) => {
-          const stepMap = { 0: 'upload', 1: 'mapping', 2: 'complete' };
-          const currentStepIndex = step === 'preview' ? 0 : step === 'processing' ? 1 : 
-            Object.values(stepMap).indexOf(step);
-          const isActive = index <= currentStepIndex;
-          const isComplete = index < currentStepIndex || step === 'complete';
-          
-          return (
-            <div key={label} className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
-                  isComplete ? 'bg-[#7c9a82] text-white' :
-                  isActive ? 'bg-[#1a1a1a] text-white' :
-                  'bg-[#e8e4df] text-[#404040]'
-                }`}>
-                  {isComplete ? <CheckCircle2 className="w-4 h-4" /> : index + 1}
-                </div>
-                <span className={`text-sm ${isActive ? 'text-[#1a1a1a] font-medium' : 'text-[#404040]'}`}>
-                  {label}
-                </span>
-              </div>
-              {index < 2 && (
-                <div className={`w-8 h-px ${isComplete ? 'bg-[#7c9a82]' : 'bg-[#e8e4df]'}`} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Error Alert */}
-      {error && (
-        <div className="flex items-center gap-3 p-4 bg-[#c27272]/10 border border-[#c27272]/20 rounded-lg text-[#a05555]">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="ml-auto hover:opacity-70">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Upload Step */}
-      {step === 'upload' && (
-        <div className="card">
+      {/* Upload Area */}
+      <div className="card">
+        {!file ? (
           <div
+            className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-all ${
+              isDragActive
+                ? 'border-[#7c9a82] bg-[#7c9a82]/5'
+                : 'border-[#e8e4df] hover:border-[#c9b8a8]'
+            }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`dropzone ${isDragging ? 'active' : ''}`}
+            onClick={() => fileInputRef.current?.click()}
           >
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-[#f7f5f2] border border-[#e8e4df] flex items-center justify-center">
-                <Upload className="w-6 h-6 text-[#404040]" strokeWidth={1.75} />
-              </div>
-              <div className="text-center">
-                <p className="text-base font-medium text-[#1a1a1a] mb-1">
-                  Drop your file here
-                </p>
-                <p className="text-sm text-[#404040]">Supports CSV, Excel (.xlsx, .xls), and PDF files</p>
-              </div>
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls,.pdf"
-                onChange={handleFileSelect}
-                className="hidden"
-                id="file-upload"
-              />
-              <label htmlFor="file-upload" className="btn btn-primary cursor-pointer">
-                <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1.75} />
-                Select File
-              </label>
+            <div className="w-14 h-14 rounded-full bg-[#f7f5f2] flex items-center justify-center mx-auto mb-4">
+              <FileUp className="w-6 h-6 text-[#7c9a82]" strokeWidth={1.5} />
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mapping Step */}
-      {(step === 'mapping' || step === 'preview') && preview && (
-        <div className="space-y-6">
-          {/* File Info */}
-          <div className="card">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-lg bg-[#7c9a82]/10 flex items-center justify-center">
-                <FileSpreadsheet className="w-5 h-5 text-[#5a7560]" strokeWidth={1.75} />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-[#1a1a1a]">{file?.name}</p>
-                <p className="text-sm text-[#404040]">
-                  {preview.rowCount.toLocaleString()} rows · {preview.headers.length} columns
-                </p>
-              </div>
-              <button onClick={resetUpload} className="btn btn-secondary text-sm">
-                Remove
-              </button>
-            </div>
-          </div>
-
-          {/* Pharmacy Name */}
-          <div className="card">
-            <label className="block text-sm font-medium text-[#1a1a1a] mb-2">
-              Pharmacy Name <span className="text-[#c27272]">*</span>
-            </label>
+            <p className="text-lg font-medium text-[#1a1a1a] mb-2">
+              Drop your file here, or click to browse
+            </p>
+            <p className="text-sm text-[#404040]">
+              Supports CSV, Excel (.xlsx, .xls), and PDF files
+            </p>
             <input
-              type="text"
-              value={pharmacyName}
-              onChange={(e) => setPharmacyName(e.target.value)}
-              placeholder="Enter pharmacy name"
-              className="input"
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept=".csv,.xlsx,.xls,.pdf"
+              onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
             />
           </div>
-
-          {/* Column Mapping */}
-          <div className="card">
-            <h3 className="text-base font-semibold text-[#1a1a1a] mb-4">Map Columns</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { key: 'date', label: 'Date', required: true },
-                { key: 'productName', label: 'Product Name', required: true },
-                { key: 'quantity', label: 'Quantity', required: false },
-                { key: 'productCode', label: 'Product Code', required: false },
-                { key: 'totalPrice', label: 'Total Price', required: false, hint: 'Optional - uses quantity if not provided' },
-                { key: 'unitPrice', label: 'Unit Price', required: false },
-              ].map((field) => (
-                <div key={field.key}>
-                  <label className="block text-sm font-medium text-[#1a1a1a] mb-2">
-                    {field.label} {field.required && <span className="text-[#c27272]">*</span>}
-                  </label>
-                  <select
-                    value={mapping[field.key as keyof ColumnMapping] || ''}
-                    onChange={(e) => setMapping({ ...mapping, [field.key]: e.target.value })}
-                    className="select"
-                  >
-                    <option value="">Select column...</option>
-                    {preview.headers.map((header) => (
-                      <option key={header} value={header}>{header}</option>
-                    ))}
-                  </select>
+        ) : (
+          <div className="space-y-6">
+            {/* File Info */}
+            <div className="flex items-center justify-between p-4 bg-[#f7f5f2] rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#7c9a82]/10 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-[#7c9a82]" />
                 </div>
-              ))}
+                <div>
+                  <p className="font-medium text-[#1a1a1a]">{file.name}</p>
+                  <p className="text-sm text-[#404040]">{formatFileSize(file.size)}</p>
+                </div>
+              </div>
+              <button onClick={resetUpload} className="text-[#404040] hover:text-[#1a1a1a]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-[#7c9a82] border-t-transparent rounded-full animate-spin"></div>
+                <span className="ml-3 text-[#404040]">Analyzing file...</span>
+              </div>
+            )}
+
+            {preview && !loading && (
+              <>
+                {/* Pharmacy Name */}
+                <div>
+                  <label className="block text-sm font-medium text-[#1a1a1a] mb-2">
+                    Pharmacy Name <span className="text-[#c27272]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyName}
+                    onChange={(e) => setPharmacyName(e.target.value)}
+                    placeholder="Enter pharmacy name..."
+                    className="input"
+                  />
+                </div>
+
+                {/* Column Mapping */}
+                <div>
+                  <label className="block text-sm font-medium text-[#1a1a1a] mb-3">
+                    Column Mapping
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs text-[#404040] mb-1">
+                        Date Column <span className="text-[#c27272]">*</span>
+                      </label>
+                      <select
+                        value={mapping.date}
+                        onChange={(e) => setMapping({ ...mapping, date: e.target.value })}
+                        className="select"
+                      >
+                        <option value="">Select...</option>
+                        {preview.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#404040] mb-1">
+                        Product Name <span className="text-[#c27272]">*</span>
+                      </label>
+                      <select
+                        value={mapping.productName}
+                        onChange={(e) => setMapping({ ...mapping, productName: e.target.value })}
+                        className="select"
+                      >
+                        <option value="">Select...</option>
+                        {preview.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#404040] mb-1">Product Code</label>
+                      <select
+                        value={mapping.productCode || ''}
+                        onChange={(e) => setMapping({ ...mapping, productCode: e.target.value || undefined })}
+                        className="select"
+                      >
+                        <option value="">None</option>
+                        {preview.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#404040] mb-1">Quantity</label>
+                      <select
+                        value={mapping.quantity || ''}
+                        onChange={(e) => setMapping({ ...mapping, quantity: e.target.value || undefined })}
+                        className="select"
+                      >
+                        <option value="">None (default: 1)</option>
+                        {preview.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#404040] mb-1">Unit Price</label>
+                      <select
+                        value={mapping.unitPrice || ''}
+                        onChange={(e) => setMapping({ ...mapping, unitPrice: e.target.value || undefined })}
+                        className="select"
+                      >
+                        <option value="">None</option>
+                        {preview.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#404040] mb-1">Total Price</label>
+                      <select
+                        value={mapping.totalPrice || ''}
+                        onChange={(e) => setMapping({ ...mapping, totalPrice: e.target.value || undefined })}
+                        className="select"
+                      >
+                        <option value="">None (uses quantity)</option>
+                        {preview.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview Table */}
+                <div>
+                  <label className="block text-sm font-medium text-[#1a1a1a] mb-3">
+                    Preview ({preview.rowCount} rows)
+                  </label>
+                  <div className="overflow-x-auto rounded-lg border border-[#e8e4df]">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-[#f7f5f2]">
+                        <tr>
+                          {preview.headers.slice(0, 8).map((h) => (
+                            <th key={h} className="px-3 py-2 text-left text-xs font-medium text-[#404040]">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.preview.slice(0, 5).map((row, i) => (
+                          <tr key={i} className="border-t border-[#e8e4df]">
+                            {preview.headers.slice(0, 8).map((h) => (
+                              <td key={h} className="px-3 py-2 text-[#1a1a1a] truncate max-w-[150px]">
+                                {row[h]}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Upload Button */}
+                <div className="flex justify-end gap-3">
+                  <button onClick={resetUpload} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpload}
+                    disabled={uploading || !pharmacyName || !mapping.date || !mapping.productName}
+                    className="btn btn-primary"
+                  >
+                    {uploading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Invoice
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Result Messages */}
+        {result && (
+          <div className={`mt-6 p-4 rounded-lg flex items-start gap-3 ${
+            result.success ? 'bg-[#7c9a82]/10 text-[#5a7560]' : 'bg-[#c27272]/10 text-[#a25555]'
+          }`}>
+            {result.success ? (
+              <Check className="w-5 h-5 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-5 h-5 mt-0.5" />
+            )}
+            <div>
+              <p className="font-medium">{result.success ? 'Upload Successful' : 'Upload Failed'}</p>
+              <p className="text-sm mt-1">{result.message || result.error}</p>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Data Preview */}
-          <div className="card">
-            <h3 className="text-base font-semibold text-[#1a1a1a] mb-4">Preview</h3>
-            <div className="overflow-x-auto">
-              <table className="table text-xs">
-                <thead>
-                  <tr>
-                    {preview.headers.map((header) => (
-                      <th key={header} className="whitespace-nowrap">
-                        {header}
-                        {Object.values(mapping).includes(header) && (
-                          <span className="ml-2 badge badge-success">mapped</span>
+      {/* Upload History */}
+      {uploadHistory.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-5">
+            <Clock className="w-5 h-5 text-[#404040]" />
+            <h2 className="text-lg font-semibold text-[#1a1a1a]">Recent Uploads</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Pharmacy</th>
+                  <th className="text-right">Rows</th>
+                  <th className="text-right">Invoices</th>
+                  <th className="text-right">Items</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {uploadHistory.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-[#404040]" />
+                        <span className="font-medium truncate max-w-[200px]">{item.file_name}</span>
+                      </div>
+                    </td>
+                    <td>{item.pharmacy_name}</td>
+                    <td className="text-right tabular-nums">{item.row_count?.toLocaleString() || '-'}</td>
+                    <td className="text-right tabular-nums">{item.invoice_count?.toLocaleString() || '-'}</td>
+                    <td className="text-right tabular-nums">{item.item_count?.toLocaleString() || '-'}</td>
+                    <td>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        item.status === 'completed' 
+                          ? 'bg-[#7c9a82]/10 text-[#5a7560]' 
+                          : 'bg-[#c27272]/10 text-[#a25555]'
+                      }`}>
+                        {item.status === 'completed' ? (
+                          <CheckCircle className="w-3 h-3" />
+                        ) : (
+                          <XCircle className="w-3 h-3" />
                         )}
-                      </th>
-                    ))}
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="text-[#404040]">{formatDate(item.uploaded_at)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {preview.preview.map((row, index) => (
-                    <tr key={index}>
-                      {preview.headers.map((header) => (
-                        <td key={header} className="whitespace-nowrap">
-                          {row[header]}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Upload Button */}
-          <div className="flex justify-end gap-3">
-            <button onClick={resetUpload} className="btn btn-secondary">
-              Cancel
-            </button>
-            <button
-              onClick={handleUpload}
-              disabled={!pharmacyName || !mapping.date || !mapping.productName}
-              className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Upload
-              <ArrowRight className="w-4 h-4 ml-2" strokeWidth={1.75} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Processing Step */}
-      {step === 'processing' && (
-        <div className="card">
-          <div className="flex flex-col items-center gap-4 py-12">
-            <Loader2 className="w-8 h-8 text-[#1a1a1a] animate-spin" />
-            <p className="text-sm text-[#404040]">Processing your data...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Complete Step */}
-      {step === 'complete' && result && (
-        <div className="card">
-          <div className="flex flex-col items-center gap-4 py-8">
-            <div className="w-14 h-14 rounded-xl bg-[#7c9a82]/10 flex items-center justify-center">
-              <CheckCircle2 className="w-7 h-7 text-[#5a7560]" />
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-semibold text-[#1a1a1a] mb-1">Upload Complete</p>
-              <p className="text-sm text-[#404040]">Data imported successfully</p>
-            </div>
-
-            <div className="flex gap-8 mt-4">
-              <div className="text-center">
-                <p className="text-2xl font-semibold tabular-nums">{result.invoices}</p>
-                <p className="text-sm text-[#404040]">Invoices</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-semibold tabular-nums">{result.items}</p>
-                <p className="text-sm text-[#404040]">Items</p>
-              </div>
-            </div>
-
-            <button onClick={resetUpload} className="btn btn-primary mt-4">
-              Upload Another
-            </button>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
