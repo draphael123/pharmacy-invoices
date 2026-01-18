@@ -55,8 +55,8 @@ async function parseExcel(buffer: ArrayBuffer): Promise<Record<string, string>[]
 }
 
 async function parsePDF(buffer: Buffer): Promise<Record<string, string>[]> {
-  // Dynamic import for CommonJS module
-  const pdfParse = await import('pdf-parse').then(m => m.default || m);
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require('pdf-parse');
   const pdfData = await pdfParse(buffer);
   const text = pdfData.text;
   
