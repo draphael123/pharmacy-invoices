@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-// @ts-expect-error - pdf-parse doesn't have types
-import pdf from 'pdf-parse';
 
 const COLUMN_PATTERNS: Record<string, string[]> = {
   date: ['date', 'invoice_date', 'invoicedate', 'inv_date', 'order_date', 'orderdate', 'transaction_date', 'trans_date', 'sale_date', 'saledate', 'created', 'created_at', 'ship_date', 'shipped_date'],
@@ -50,7 +48,9 @@ async function parseExcel(buffer: ArrayBuffer): Promise<{ headers: string[]; dat
 
 async function parsePDF(buffer: Buffer): Promise<{ headers: string[]; data: Record<string, string>[] }> {
   try {
-    const pdfData = await pdf(buffer);
+    // Dynamic import for CommonJS module
+    const pdfParse = await import('pdf-parse').then(m => m.default || m);
+    const pdfData = await pdfParse(buffer);
     const text = pdfData.text;
     
     // Split into lines and filter empty ones

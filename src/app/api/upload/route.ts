@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-// @ts-expect-error - pdf-parse doesn't have types
-import pdf from 'pdf-parse';
 import { getOrCreatePharmacy, createInvoice, createLineItems } from '@/lib/db';
 
 interface ColumnMapping {
@@ -57,7 +55,9 @@ async function parseExcel(buffer: ArrayBuffer): Promise<Record<string, string>[]
 }
 
 async function parsePDF(buffer: Buffer): Promise<Record<string, string>[]> {
-  const pdfData = await pdf(buffer);
+  // Dynamic import for CommonJS module
+  const pdfParse = await import('pdf-parse').then(m => m.default || m);
+  const pdfData = await pdfParse(buffer);
   const text = pdfData.text;
   
   const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
