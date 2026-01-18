@@ -86,7 +86,6 @@ export default function UploadPage() {
       const data: PreviewData = await response.json();
       setPreview(data);
       
-      // Auto-fill detected mappings
       setMapping({
         date: data.detectedMapping.date || '',
         productName: data.detectedMapping.productName || '',
@@ -97,7 +96,7 @@ export default function UploadPage() {
       });
 
       setStep('mapping');
-    } catch (err) {
+    } catch {
       setError('Failed to preview file. Please check the format.');
       setStep('upload');
     }
@@ -158,33 +157,35 @@ export default function UploadPage() {
     <div className="space-y-8 fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Upload Invoice Data</h1>
-        <p className="text-slate-400">Import CSV files from your pharmacy partners</p>
+        <h1 className="page-title">Upload Data</h1>
+        <p className="page-subtitle">Import CSV invoice files from pharmacy partners</p>
       </div>
 
       {/* Progress Steps */}
-      <div className="flex items-center gap-4">
-        {['Upload', 'Preview', 'Map Columns', 'Complete'].map((label, index) => {
-          const stepIndex = ['upload', 'preview', 'mapping', 'complete'].indexOf(step);
-          const isActive = index <= stepIndex || (step === 'processing' && index <= 2);
-          const isComplete = index < stepIndex || step === 'complete';
+      <div className="flex items-center gap-3">
+        {['Upload', 'Map Columns', 'Complete'].map((label, index) => {
+          const stepMap = { 0: 'upload', 1: 'mapping', 2: 'complete' };
+          const currentStepIndex = step === 'preview' ? 0 : step === 'processing' ? 1 : 
+            Object.values(stepMap).indexOf(step);
+          const isActive = index <= currentStepIndex;
+          const isComplete = index < currentStepIndex || step === 'complete';
           
           return (
-            <div key={label} className="flex items-center gap-4">
+            <div key={label} className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-                  isComplete ? 'bg-emerald-500 text-white' :
-                  isActive ? 'bg-cyan-500 text-slate-900' :
-                  'bg-slate-700 text-slate-400'
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
+                  isComplete ? 'bg-[#7c9a82] text-white' :
+                  isActive ? 'bg-[#1a1a1a] text-white' :
+                  'bg-[#e8e4df] text-[#404040]'
                 }`}>
-                  {isComplete ? <CheckCircle2 className="w-5 h-5" /> : index + 1}
+                  {isComplete ? <CheckCircle2 className="w-4 h-4" /> : index + 1}
                 </div>
-                <span className={`text-sm ${isActive ? 'text-white' : 'text-slate-400'}`}>
+                <span className={`text-sm ${isActive ? 'text-[#1a1a1a] font-medium' : 'text-[#404040]'}`}>
                   {label}
                 </span>
               </div>
-              {index < 3 && (
-                <div className={`w-12 h-0.5 ${isComplete ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+              {index < 2 && (
+                <div className={`w-8 h-px ${isComplete ? 'bg-[#7c9a82]' : 'bg-[#e8e4df]'}`} />
               )}
             </div>
           );
@@ -193,11 +194,11 @@ export default function UploadPage() {
 
       {/* Error Alert */}
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">
+        <div className="flex items-center gap-3 p-4 bg-[#c27272]/10 border border-[#c27272]/20 rounded-lg text-[#a05555]">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p>{error}</p>
-          <button onClick={() => setError(null)} className="ml-auto">
-            <X className="w-5 h-5" />
+          <p className="text-sm">{error}</p>
+          <button onClick={() => setError(null)} className="ml-auto hover:opacity-70">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -212,14 +213,14 @@ export default function UploadPage() {
             className={`dropzone ${isDragging ? 'active' : ''}`}
           >
             <div className="flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 flex items-center justify-center">
-                <Upload className="w-8 h-8 text-cyan-400" />
+              <div className="w-14 h-14 rounded-xl bg-[#f7f5f2] border border-[#e8e4df] flex items-center justify-center">
+                <Upload className="w-6 h-6 text-[#404040]" strokeWidth={1.75} />
               </div>
               <div className="text-center">
-                <p className="text-lg font-medium text-white mb-1">
+                <p className="text-base font-medium text-[#1a1a1a] mb-1">
                   Drop your CSV file here
                 </p>
-                <p className="text-slate-400 text-sm">or click to browse</p>
+                <p className="text-sm text-[#404040]">or click to browse</p>
               </div>
               <input
                 type="file"
@@ -229,21 +230,10 @@ export default function UploadPage() {
                 id="file-upload"
               />
               <label htmlFor="file-upload" className="btn btn-primary cursor-pointer">
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Select CSV File
+                <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1.75} />
+                Select File
               </label>
             </div>
-          </div>
-
-          <div className="mt-6 p-4 bg-slate-800/50 rounded-xl">
-            <h4 className="text-sm font-medium text-white mb-2">Expected CSV Format</h4>
-            <p className="text-xs text-slate-400 mb-3">
-              Your CSV should contain columns for date, product name, and total price at minimum.
-            </p>
-            <code className="text-xs text-cyan-400 bg-slate-900/50 p-3 rounded-lg block overflow-x-auto">
-              date,product_name,product_code,quantity,unit_price,total<br/>
-              2024-01-15,Aspirin 100mg,ASP100,50,2.50,125.00
-            </code>
           </div>
         </div>
       )}
@@ -254,17 +244,16 @@ export default function UploadPage() {
           {/* File Info */}
           <div className="card">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                <FileSpreadsheet className="w-6 h-6 text-emerald-400" />
+              <div className="w-10 h-10 rounded-lg bg-[#7c9a82]/10 flex items-center justify-center">
+                <FileSpreadsheet className="w-5 h-5 text-[#5a7560]" strokeWidth={1.75} />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-white">{file?.name}</p>
-                <p className="text-sm text-slate-400">
-                  {preview.rowCount.toLocaleString()} rows • {preview.headers.length} columns
+                <p className="font-medium text-[#1a1a1a]">{file?.name}</p>
+                <p className="text-sm text-[#404040]">
+                  {preview.rowCount.toLocaleString()} rows · {preview.headers.length} columns
                 </p>
               </div>
-              <button onClick={resetUpload} className="btn btn-secondary">
-                <X className="w-4 h-4 mr-2" />
+              <button onClick={resetUpload} className="btn btn-secondary text-sm">
                 Remove
               </button>
             </div>
@@ -272,8 +261,8 @@ export default function UploadPage() {
 
           {/* Pharmacy Name */}
           <div className="card">
-            <label className="block text-sm font-medium text-white mb-2">
-              Pharmacy Name <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-[#1a1a1a] mb-2">
+              Pharmacy Name <span className="text-[#c27272]">*</span>
             </label>
             <input
               type="text"
@@ -282,120 +271,43 @@ export default function UploadPage() {
               placeholder="Enter pharmacy name"
               className="input"
             />
-            <p className="text-xs text-slate-400 mt-2">
-              This will create a new pharmacy or match an existing one
-            </p>
           </div>
 
           {/* Column Mapping */}
           <div className="card">
-            <h3 className="text-lg font-semibold text-white mb-4">Map Your Columns</h3>
-            <p className="text-sm text-slate-400 mb-6">
-              Match your CSV columns to the required fields. We&apos;ve auto-detected some mappings.
-            </p>
+            <h3 className="text-base font-semibold text-[#1a1a1a] mb-4">Map Columns</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Date Column <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={mapping.date}
-                  onChange={(e) => setMapping({ ...mapping, date: e.target.value })}
-                  className="select"
-                >
-                  <option value="">Select column...</option>
-                  {preview.headers.map((header) => (
-                    <option key={header} value={header}>{header}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Product Name <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={mapping.productName}
-                  onChange={(e) => setMapping({ ...mapping, productName: e.target.value })}
-                  className="select"
-                >
-                  <option value="">Select column...</option>
-                  {preview.headers.map((header) => (
-                    <option key={header} value={header}>{header}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Total Price <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={mapping.totalPrice}
-                  onChange={(e) => setMapping({ ...mapping, totalPrice: e.target.value })}
-                  className="select"
-                >
-                  <option value="">Select column...</option>
-                  {preview.headers.map((header) => (
-                    <option key={header} value={header}>{header}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Product Code <span className="text-slate-400 text-xs">(optional)</span>
-                </label>
-                <select
-                  value={mapping.productCode}
-                  onChange={(e) => setMapping({ ...mapping, productCode: e.target.value })}
-                  className="select"
-                >
-                  <option value="">Select column...</option>
-                  {preview.headers.map((header) => (
-                    <option key={header} value={header}>{header}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Quantity <span className="text-slate-400 text-xs">(optional)</span>
-                </label>
-                <select
-                  value={mapping.quantity}
-                  onChange={(e) => setMapping({ ...mapping, quantity: e.target.value })}
-                  className="select"
-                >
-                  <option value="">Select column...</option>
-                  {preview.headers.map((header) => (
-                    <option key={header} value={header}>{header}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Unit Price <span className="text-slate-400 text-xs">(optional)</span>
-                </label>
-                <select
-                  value={mapping.unitPrice}
-                  onChange={(e) => setMapping({ ...mapping, unitPrice: e.target.value })}
-                  className="select"
-                >
-                  <option value="">Select column...</option>
-                  {preview.headers.map((header) => (
-                    <option key={header} value={header}>{header}</option>
-                  ))}
-                </select>
-              </div>
+              {[
+                { key: 'date', label: 'Date', required: true },
+                { key: 'productName', label: 'Product Name', required: true },
+                { key: 'totalPrice', label: 'Total Price', required: true },
+                { key: 'productCode', label: 'Product Code', required: false },
+                { key: 'quantity', label: 'Quantity', required: false },
+                { key: 'unitPrice', label: 'Unit Price', required: false },
+              ].map((field) => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-[#1a1a1a] mb-2">
+                    {field.label} {field.required && <span className="text-[#c27272]">*</span>}
+                  </label>
+                  <select
+                    value={mapping[field.key as keyof ColumnMapping] || ''}
+                    onChange={(e) => setMapping({ ...mapping, [field.key]: e.target.value })}
+                    className="select"
+                  >
+                    <option value="">Select column...</option>
+                    {preview.headers.map((header) => (
+                      <option key={header} value={header}>{header}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Data Preview */}
           <div className="card">
-            <h3 className="text-lg font-semibold text-white mb-4">Data Preview</h3>
+            <h3 className="text-base font-semibold text-[#1a1a1a] mb-4">Preview</h3>
             <div className="overflow-x-auto">
               <table className="table text-xs">
                 <thead>
@@ -404,7 +316,7 @@ export default function UploadPage() {
                       <th key={header} className="whitespace-nowrap">
                         {header}
                         {Object.values(mapping).includes(header) && (
-                          <span className="ml-2 badge badge-info">mapped</span>
+                          <span className="ml-2 badge badge-success">mapped</span>
                         )}
                       </th>
                     ))}
@@ -426,7 +338,7 @@ export default function UploadPage() {
           </div>
 
           {/* Upload Button */}
-          <div className="flex justify-end gap-4">
+          <div className="flex justify-end gap-3">
             <button onClick={resetUpload} className="btn btn-secondary">
               Cancel
             </button>
@@ -435,8 +347,8 @@ export default function UploadPage() {
               disabled={!pharmacyName || !mapping.date || !mapping.productName || !mapping.totalPrice}
               className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Upload Data
-              <ArrowRight className="w-4 h-4 ml-2" />
+              Upload
+              <ArrowRight className="w-4 h-4 ml-2" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -446,13 +358,8 @@ export default function UploadPage() {
       {step === 'processing' && (
         <div className="card">
           <div className="flex flex-col items-center gap-4 py-12">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-medium text-white mb-1">Processing Your Data</p>
-              <p className="text-slate-400 text-sm">This may take a moment...</p>
-            </div>
+            <Loader2 className="w-8 h-8 text-[#1a1a1a] animate-spin" />
+            <p className="text-sm text-[#404040]">Processing your data...</p>
           </div>
         </div>
       )}
@@ -461,31 +368,27 @@ export default function UploadPage() {
       {step === 'complete' && result && (
         <div className="card">
           <div className="flex flex-col items-center gap-4 py-8">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 flex items-center justify-center">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+            <div className="w-14 h-14 rounded-xl bg-[#7c9a82]/10 flex items-center justify-center">
+              <CheckCircle2 className="w-7 h-7 text-[#5a7560]" />
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-white mb-2">Upload Complete!</p>
-              <p className="text-slate-400">Your invoice data has been processed successfully</p>
+              <p className="text-xl font-semibold text-[#1a1a1a] mb-1">Upload Complete</p>
+              <p className="text-sm text-[#404040]">Data imported successfully</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-6 mt-6 w-full max-w-md">
+            <div className="flex gap-8 mt-4">
               <div className="text-center">
-                <p className="text-3xl font-bold text-cyan-400">{result.invoices}</p>
-                <p className="text-sm text-slate-400">Invoices</p>
+                <p className="text-2xl font-semibold tabular-nums">{result.invoices}</p>
+                <p className="text-sm text-[#404040]">Invoices</p>
               </div>
               <div className="text-center">
-                <p className="text-3xl font-bold text-emerald-400">{result.items}</p>
-                <p className="text-sm text-slate-400">Items</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-bold text-white truncate">{result.pharmacy}</p>
-                <p className="text-sm text-slate-400">Pharmacy</p>
+                <p className="text-2xl font-semibold tabular-nums">{result.items}</p>
+                <p className="text-sm text-[#404040]">Items</p>
               </div>
             </div>
 
-            <button onClick={resetUpload} className="btn btn-primary mt-6">
-              Upload Another File
+            <button onClick={resetUpload} className="btn btn-primary mt-4">
+              Upload Another
             </button>
           </div>
         </div>
@@ -493,4 +396,3 @@ export default function UploadPage() {
     </div>
   );
 }
-

@@ -8,8 +8,6 @@ import {
   FileText, 
   TrendingUp, 
   TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight 
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -118,34 +116,32 @@ export default function DashboardPage() {
         label: 'Total Spend',
         data: spendData.map(d => d.total),
         fill: true,
-        borderColor: '#05bfdb',
-        backgroundColor: 'rgba(5, 191, 219, 0.1)',
+        borderColor: '#1a1a1a',
+        backgroundColor: 'rgba(26, 26, 26, 0.04)',
         borderWidth: 2,
-        tension: 0.4,
-        pointBackgroundColor: '#05bfdb',
-        pointBorderColor: '#05bfdb',
-        pointHoverBackgroundColor: '#00ffca',
-        pointHoverBorderColor: '#00ffca',
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        tension: 0.3,
+        pointBackgroundColor: '#1a1a1a',
+        pointBorderColor: '#1a1a1a',
+        pointRadius: 3,
+        pointHoverRadius: 5,
       },
     ],
   };
 
   const topProductsChartData = {
-    labels: topProducts.map(p => p.product_name.length > 20 ? p.product_name.substring(0, 20) + '...' : p.product_name),
+    labels: topProducts.map(p => p.product_name.length > 25 ? p.product_name.substring(0, 25) + '...' : p.product_name),
     datasets: [
       {
         label: 'Revenue',
         data: topProducts.map(p => p.total_revenue),
         backgroundColor: [
-          'rgba(5, 191, 219, 0.8)',
-          'rgba(0, 255, 202, 0.8)',
-          'rgba(8, 131, 149, 0.8)',
-          'rgba(10, 77, 104, 0.8)',
-          'rgba(51, 65, 85, 0.8)',
+          '#1a1a1a',
+          '#404040',
+          '#7c9a82',
+          '#c9b8a8',
+          '#d4a853',
         ],
-        borderRadius: 8,
+        borderRadius: 4,
         borderSkipped: false,
       },
     ],
@@ -159,23 +155,21 @@ export default function DashboardPage() {
         display: false,
       },
       tooltip: {
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        titleColor: '#f8fafc',
-        bodyColor: '#94a3b8',
-        borderColor: '#334155',
-        borderWidth: 1,
+        backgroundColor: '#1a1a1a',
+        titleColor: '#ffffff',
+        bodyColor: '#e8e4df',
         padding: 12,
-        cornerRadius: 8,
+        cornerRadius: 6,
         displayColors: false,
       },
     },
     scales: {
       x: {
         grid: {
-          color: 'rgba(51, 65, 85, 0.3)',
+          display: false,
         },
         ticks: {
-          color: '#94a3b8',
+          color: '#404040',
           font: {
             size: 11,
           },
@@ -183,13 +177,16 @@ export default function DashboardPage() {
       },
       y: {
         grid: {
-          color: 'rgba(51, 65, 85, 0.3)',
+          color: '#e8e4df',
         },
         ticks: {
-          color: '#94a3b8',
+          color: '#404040',
           font: {
             size: 11,
           },
+        },
+        border: {
+          display: false,
         },
       },
     },
@@ -204,26 +201,27 @@ export default function DashboardPage() {
         display: false,
       },
       tooltip: {
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        titleColor: '#f8fafc',
-        bodyColor: '#94a3b8',
-        borderColor: '#334155',
-        borderWidth: 1,
+        backgroundColor: '#1a1a1a',
+        titleColor: '#ffffff',
+        bodyColor: '#e8e4df',
         padding: 12,
-        cornerRadius: 8,
+        cornerRadius: 6,
         displayColors: false,
       },
     },
     scales: {
       x: {
         grid: {
-          color: 'rgba(51, 65, 85, 0.3)',
+          color: '#e8e4df',
         },
         ticks: {
-          color: '#94a3b8',
+          color: '#404040',
           font: {
             size: 11,
           },
+        },
+        border: {
+          display: false,
         },
       },
       y: {
@@ -231,7 +229,7 @@ export default function DashboardPage() {
           display: false,
         },
         ticks: {
-          color: '#94a3b8',
+          color: '#404040',
           font: {
             size: 11,
           },
@@ -244,17 +242,13 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="h-8 w-48 skeleton"></div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="card">
               <div className="h-4 w-24 skeleton mb-4"></div>
               <div className="h-8 w-32 skeleton"></div>
             </div>
           ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card h-96 skeleton"></div>
-          <div className="card h-96 skeleton"></div>
         </div>
       </div>
     );
@@ -265,29 +259,25 @@ export default function DashboardPage() {
       label: 'Total Spend',
       value: formatCurrency(stats?.total_spend || 0),
       icon: DollarSign,
-      color: 'from-cyan-500 to-teal-500',
-      shadowColor: 'shadow-cyan-500/30',
+      accent: 'bg-[#1a1a1a]',
     },
     {
-      label: 'Total Items',
+      label: 'Items Sold',
       value: formatNumber(stats?.total_items || 0),
       icon: Package,
-      color: 'from-emerald-500 to-green-500',
-      shadowColor: 'shadow-emerald-500/30',
+      accent: 'bg-[#7c9a82]',
     },
     {
       label: 'Pharmacies',
       value: formatNumber(stats?.pharmacy_count || 0),
       icon: Building2,
-      color: 'from-blue-500 to-indigo-500',
-      shadowColor: 'shadow-blue-500/30',
+      accent: 'bg-[#d4a853]',
     },
     {
       label: 'Invoices',
       value: formatNumber(stats?.invoice_count || 0),
       icon: FileText,
-      color: 'from-purple-500 to-pink-500',
-      shadowColor: 'shadow-purple-500/30',
+      accent: 'bg-[#c9b8a8]',
     },
   ];
 
@@ -296,79 +286,65 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
-          <p className="text-slate-400">Overview of pharmacy invoice data and projections</p>
+          <h1 className="page-title">Overview</h1>
+          <p className="page-subtitle">Track pharmacy spend and product demand</p>
         </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as 'week' | 'month' | 'year')}
-            className="select !w-auto"
-          >
-            <option value="week">Weekly</option>
-            <option value="month">Monthly</option>
-            <option value="year">Yearly</option>
-          </select>
-        </div>
+        <select
+          value={period}
+          onChange={(e) => setPeriod(e.target.value as 'week' | 'month' | 'year')}
+          className="select !w-auto text-sm"
+        >
+          <option value="week">Weekly</option>
+          <option value="month">Monthly</option>
+          <option value="year">Yearly</option>
+        </select>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {statCards.map((stat, index) => (
           <div 
             key={stat.label} 
             className={`card slide-up stagger-${index + 1}`}
             style={{ animationFillMode: 'backwards' }}
           >
-            <div className="flex items-start justify-between mb-4">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg ${stat.shadowColor}`}>
-                <stat.icon className="w-6 h-6 text-white" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-9 h-9 rounded-lg ${stat.accent} flex items-center justify-center`}>
+                <stat.icon className="w-[18px] h-[18px] text-white" strokeWidth={1.75} />
               </div>
-              {stat.label === 'Total Spend' && stats && (
-                <div className={`flex items-center gap-1 text-sm ${stats.growth_rate >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {stats.growth_rate >= 0 ? (
-                    <ArrowUpRight className="w-4 h-4" />
-                  ) : (
-                    <ArrowDownRight className="w-4 h-4" />
-                  )}
-                  <span>{Math.abs(stats.growth_rate).toFixed(1)}%</span>
-                </div>
-              )}
+              <span className="stat-label">{stat.label}</span>
             </div>
-            <p className="stat-label mb-1">{stat.label}</p>
-            <p className="stat-value">{stat.value}</p>
+            <p className="stat-value tabular-nums">{stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Growth Card */}
       {stats && (
-        <div className="card slide-up stagger-5" style={{ animationFillMode: 'backwards' }}>
-          <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${
-              stats.growth_rate >= 0 
-                ? 'bg-emerald-500/20 text-emerald-400' 
-                : 'bg-red-500/20 text-red-400'
-            }`}>
-              {stats.growth_rate >= 0 ? (
-                <TrendingUp className="w-7 h-7" />
-              ) : (
-                <TrendingDown className="w-7 h-7" />
-              )}
-            </div>
-            <div>
-              <p className="text-slate-400 text-sm">Month-over-Month Growth</p>
-              <p className={`text-2xl font-bold ${stats.growth_rate >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {stats.growth_rate >= 0 ? '+' : ''}{stats.growth_rate.toFixed(1)}%
-              </p>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-slate-400 text-sm">This Month</p>
-              <p className="text-lg font-semibold text-white">{formatCurrency(stats.this_month_spend)}</p>
+        <div className="card flex items-center gap-6">
+          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+            stats.growth_rate >= 0 ? 'bg-[#7c9a82]/10' : 'bg-[#c27272]/10'
+          }`}>
+            {stats.growth_rate >= 0 ? (
+              <TrendingUp className={`w-5 h-5 ${stats.growth_rate >= 0 ? 'text-[#5a7560]' : 'text-[#c27272]'}`} />
+            ) : (
+              <TrendingDown className="w-5 h-5 text-[#c27272]" />
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-[#404040]">Month-over-Month</p>
+            <p className={`text-xl font-semibold tabular-nums ${stats.growth_rate >= 0 ? 'text-[#5a7560]' : 'text-[#c27272]'}`}>
+              {stats.growth_rate >= 0 ? '+' : ''}{stats.growth_rate.toFixed(1)}%
+            </p>
+          </div>
+          <div className="ml-auto flex gap-8">
+            <div className="text-right">
+              <p className="text-sm text-[#404040]">This Month</p>
+              <p className="text-lg font-semibold tabular-nums">{formatCurrency(stats.this_month_spend)}</p>
             </div>
             <div className="text-right">
-              <p className="text-slate-400 text-sm">Last Month</p>
-              <p className="text-lg font-semibold text-slate-300">{formatCurrency(stats.last_month_spend)}</p>
+              <p className="text-sm text-[#404040]">Last Month</p>
+              <p className="text-lg tabular-nums text-[#404040]">{formatCurrency(stats.last_month_spend)}</p>
             </div>
           </div>
         </div>
@@ -377,26 +353,26 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
-          <h3 className="text-lg font-semibold text-white mb-6">Spend Over Time</h3>
+          <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Spend Trend</h3>
           <div className="chart-container">
             {spendData.length > 0 ? (
               <Line data={spendChartData} options={chartOptions} />
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-400">
-                <p>No data available. Upload invoices to see trends.</p>
+              <div className="flex items-center justify-center h-full text-[#404040]">
+                <p className="text-sm">Upload invoices to see trends</p>
               </div>
             )}
           </div>
         </div>
 
         <div className="card">
-          <h3 className="text-lg font-semibold text-white mb-6">Top Products by Revenue</h3>
+          <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Top Products</h3>
           <div className="chart-container">
             {topProducts.length > 0 ? (
               <Bar data={topProductsChartData} options={barChartOptions} />
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-400">
-                <p>No data available. Upload invoices to see products.</p>
+              <div className="flex items-center justify-center h-full text-[#404040]">
+                <p className="text-sm">Upload invoices to see products</p>
               </div>
             )}
           </div>
@@ -406,7 +382,7 @@ export default function DashboardPage() {
       {/* Top Products Table */}
       {topProducts.length > 0 && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-white mb-6">Top Performing Products</h3>
+          <h3 className="text-base font-semibold text-[#1a1a1a] mb-5">Top Performing Products</h3>
           <div className="overflow-x-auto">
             <table className="table">
               <thead>
@@ -421,9 +397,9 @@ export default function DashboardPage() {
                 {topProducts.map((product, index) => (
                   <tr key={index}>
                     <td className="font-medium">{product.product_name}</td>
-                    <td className="text-slate-400">{product.product_code || '-'}</td>
-                    <td className="text-right">{formatNumber(product.total_quantity)}</td>
-                    <td className="text-right font-medium text-cyan-400">
+                    <td className="text-[#404040] font-mono text-sm">{product.product_code || '—'}</td>
+                    <td className="text-right tabular-nums">{formatNumber(product.total_quantity)}</td>
+                    <td className="text-right font-medium tabular-nums">
                       {formatCurrency(product.total_revenue)}
                     </td>
                   </tr>
@@ -436,4 +412,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
